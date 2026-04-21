@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id            String    @id @default(uuid())
+  shopDomain    String    @unique
+  accessToken   String    // AES-256-GCM encrypted
+  installedAt   DateTime  @default(now())
+  uninstalledAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  webhooks   ShopifyWebhook[]
+  syncEvents ShopifySyncEvent[]
+
+  @@map("shops")
+}
+
+model ShopifyWebhook {
+  id        String   @id @default(uuid())
+  shopId    String
+  topic     String
+  endpoint  String
+  shopifyId String?  // Shopify's numeric webhook ID
+  createdAt DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, topic])
+  @@map("shopify_webhooks")
+}
+
+// Financial-grade event journal. Every outbound event is persisted here
+// before being sent to Orangepill. The unique constraint on
+// (direction, eventType, idempotencyKey) is the ONLY thing that prevents
+// double-billing — never remove it.
+model ShopifySyncEvent {
+  id             String   @id @default(uuid())
+  shopId         String
+  direction      String   // 'shopify_to_op'
+  eventType      String   // 'order.finalized' | 'order.refunded'
+  resourceId     String   // shopify order/refund id
+  payloadJson    Json     // full payload stored for replay
+  endpoint       String   // target URL (frozen at record time)
+  idempotencyKey String
+  status         String   @default("pending") // 'pending' | 'sent' | 'failed'
+  attemptCount   Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@unique([direction, eventType, idempotencyKey])
+  @@index([shopId, status])
+  @@map("shopify_sync_events")
+}
