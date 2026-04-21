@@ -60,6 +60,7 @@ model ShopifySyncEvent {
 
   @@unique([shopId, direction, eventType, idempotencyKey])
   @@index([shopId, status])
+  @@index([shopId, createdAt])
   @@map("shopify_sync_events")
 }
 
