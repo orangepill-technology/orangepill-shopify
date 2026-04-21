@@ -48,7 +48,8 @@ export async function recordEvent(
     if ((err as { code?: string })?.code === 'P2002') {
       const existing = await prisma.shopifySyncEvent.findUnique({
         where: {
-          direction_eventType_idempotencyKey: {
+          shopId_direction_eventType_idempotencyKey: {
+            shopId,
             direction: 'shopify_to_op',
             eventType,
             idempotencyKey,

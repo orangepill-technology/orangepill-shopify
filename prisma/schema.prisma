@@ -57,7 +57,7 @@ model ShopifySyncEvent {
 
   shop Shop @relation(fields: [shopId], references: [id])
 
-  @@unique([direction, eventType, idempotencyKey])
+  @@unique([shopId, direction, eventType, idempotencyKey])
   @@index([shopId, status])
   @@map("shopify_sync_events")
 }

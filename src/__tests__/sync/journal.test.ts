@@ -86,6 +86,25 @@ describe('recordEvent', () => {
   });
 });
 
+describe('cross-tenant idempotency', () => {
+  it('allows the same idempotencyKey for two different shops', async () => {
+    const entryA = { ...MOCK_ENTRY, id: 'evt-shop-a', shopId: 'shop-a' };
+    const entryB = { ...MOCK_ENTRY, id: 'evt-shop-b', shopId: 'shop-b' };
+
+    // First call (shop A) succeeds
+    mockCreate.mockResolvedValueOnce(entryA);
+    const resultA = await recordEvent('shop-a', 'order.finalized', '123', PAYLOAD, 'shopify:123:order.finalized');
+    expect(resultA.isNew).toBe(true);
+    expect(resultA.entry.shopId).toBe('shop-a');
+
+    // Second call (shop B, same key) also succeeds — no collision
+    mockCreate.mockResolvedValueOnce(entryB);
+    const resultB = await recordEvent('shop-b', 'order.finalized', '123', PAYLOAD, 'shopify:123:order.finalized');
+    expect(resultB.isNew).toBe(true);
+    expect(resultB.entry.shopId).toBe('shop-b');
+  });
+});
+
 describe('markSent', () => {
   it('updates status to sent', async () => {
     mockUpdate.mockResolvedValue({ ...MOCK_ENTRY, status: 'sent' });
