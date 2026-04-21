@@ -116,7 +116,7 @@ Orangepill powers commerce directly inside messaging channels — WhatsApp, Inst
 
 ### Agentic Commerce
 
-Orangepill's agentic commerce layer lets AI agents act on behalf of customers — discovering products, initiating checkout, and completing payment autonomously. Whether embedded in a customer-facing assistant or running as a background purchasing agent, every transaction flows through the same Orangepill financial runtime: fully auditable, loyalty-enabled, and settlement-ready. Agentic Commerce is available as part of the Orangepill platform and can be connected to your Shopify catalog.
+Orangepill's agentic commerce layer works in both directions — agents as buyers and agents as sellers. On the buying side, AI agents act on behalf of customers: discovering products, initiating checkout, and completing payment autonomously. On the selling side, merchant-owned agents sell proactively — reaching out to customers, presenting offers, and closing transactions without any storefront interaction. A merchant agent can identify a high-value customer, propose a reorder or upsell through the customer's preferred channel, and take payment in the same conversation. Every transaction — whether triggered by a human or an agent — flows through the same Orangepill financial runtime: fully auditable, loyalty-enabled, and settlement-ready. Agentic Commerce is available as part of the Orangepill platform and can be connected to your Shopify catalog.
 
 ---
 
