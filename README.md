@@ -108,4 +108,16 @@ For setup help, contact your Orangepill account manager or visit [orangepill.tec
 
 ---
 
-*Orangepill for Shopify is part of the Orangepill multi-channel commerce platform — the same financial runtime that powers Orangepill on WooCommerce, WhatsApp, and beyond.*
+## Part of the Orangepill Platform
+
+### Conversational Commerce
+
+Orangepill powers commerce directly inside messaging channels — WhatsApp, Instagram, Telegram, and more. Customers can browse, order, and pay without leaving the conversation. Because every channel shares the same customer identity and loyalty wallet, a purchase on WhatsApp and a purchase on your Shopify store both earn and spend from the same balance. Conversational Commerce is available as a standalone Orangepill product and works seamlessly alongside this app.
+
+### Agentic Commerce
+
+Orangepill's agentic commerce layer lets AI agents act on behalf of customers — discovering products, initiating checkout, and completing payment autonomously. Whether embedded in a customer-facing assistant or running as a background purchasing agent, every transaction flows through the same Orangepill financial runtime: fully auditable, loyalty-enabled, and settlement-ready. Agentic Commerce is available as part of the Orangepill platform and can be connected to your Shopify catalog.
+
+---
+
+*Orangepill for Shopify is part of the Orangepill multi-channel commerce platform — the same financial runtime that powers conversational, agentic, and traditional commerce across every channel.*
