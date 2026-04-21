@@ -46,6 +46,7 @@ export async function orangepillWebhookRoutes(fastify: FastifyInstance): Promise
       eventType,
       sessionId,
       payload,
+      rawBody,
     );
 
     if (isDuplicate) {
