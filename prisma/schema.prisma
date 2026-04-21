@@ -16,8 +16,9 @@ model Shop {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  webhooks   ShopifyWebhook[]
-  syncEvents ShopifySyncEvent[]
+  webhooks       ShopifyWebhook[]
+  syncEvents     ShopifySyncEvent[]
+  orderPayments  ShopifyOrderPayment[]
 
   @@map("shops")
 }
@@ -60,4 +61,40 @@ model ShopifySyncEvent {
   @@unique([shopId, direction, eventType, idempotencyKey])
   @@index([shopId, status])
   @@map("shopify_sync_events")
+}
+
+// Maps a Shopify order to its Orangepill checkout session.
+// One active (pending) session per order at a time; failed/expired rows
+// are left in place so new sessions can be created on retry.
+model ShopifyOrderPayment {
+  id                  String    @id @default(uuid())
+  shopId              String
+  shopifyOrderId      String
+  orangepillSessionId String    @unique
+  orangepillPaymentId String?
+  checkoutUrl         String
+  amount              String
+  currency            String
+  status              String    @default("pending") // 'pending' | 'paid' | 'failed' | 'expired'
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@index([shopId, shopifyOrderId, status])
+  @@map("shopify_order_payments")
+}
+
+// Inbound Orangepill webhook events. Keyed on X-Orangepill-Event-Id
+// for at-most-once processing.
+model OrangepillWebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique
+  deliveryId  String
+  eventType   String
+  sessionId   String
+  payloadJson Json
+  processedAt DateTime @default(now())
+
+  @@map("orangepill_webhook_events")
 }

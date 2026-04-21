@@ -4,6 +4,8 @@ import { config } from './config';
 import { logger } from './logger';
 import { authRoutes } from './modules/auth/routes';
 import { webhookRoutes } from './modules/webhooks/routes';
+import { checkoutRoutes } from './modules/checkout/routes';
+import { orangepillWebhookRoutes } from './modules/orangepill/webhook-routes';
 import { healthRoutes } from './routes/health';
 import { replayRoutes } from './routes/replay';
 
@@ -16,6 +18,8 @@ async function main(): Promise<void> {
   await fastify.register(healthRoutes);
   await fastify.register(authRoutes);
   await fastify.register(webhookRoutes);
+  await fastify.register(orangepillWebhookRoutes);
+  await fastify.register(checkoutRoutes);
   await fastify.register(replayRoutes);
 
   await fastify.listen({ port: config.PORT, host: config.HOST });
