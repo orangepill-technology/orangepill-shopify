@@ -104,7 +104,7 @@ Each Shopify store is fully isolated. Events, payments, and sync history from on
 
 ## Support
 
-For setup help, contact your Orangepill account manager or visit [orangepill.cc](https://orangepill.cc).
+For setup help, contact your Orangepill account manager or visit [orangepill.technology](https://orangepill.technology).
 
 ---
 
