@@ -14,3 +14,4 @@ process.env.ORANGEPILL_API_KEY = 'test-orangepill-api-key';
 process.env.ORANGEPILL_INTEGRATION_ID = '00000000-0000-0000-0000-000000000001';
 process.env.ORANGEPILL_MERCHANT_ID = '00000000-0000-0000-0000-000000000002';
 process.env.ORANGEPILL_WEBHOOK_SECRET = 'test-orangepill-webhook-secret';
+process.env.ADMIN_API_KEY = 'test-admin-api-key-16c';
