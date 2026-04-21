@@ -17,6 +17,8 @@ const schema = z.object({
   ORANGEPILL_API_URL: z.string().url(),
   ORANGEPILL_API_KEY: z.string().min(1),
   ORANGEPILL_INTEGRATION_ID: z.string().min(1),
+  ORANGEPILL_MERCHANT_ID: z.string().min(1),
+  ORANGEPILL_WEBHOOK_SECRET: z.string().min(1),
 });
 
 export type Config = z.infer<typeof schema>;
