@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { authRoutes } from './modules/auth/routes';
 import { webhookRoutes } from './modules/webhooks/routes';
 import { checkoutRoutes } from './modules/checkout/routes';
+import { checkoutUxRoutes } from './modules/checkout/ux-routes';
 import { orangepillWebhookRoutes } from './modules/orangepill/webhook-routes';
 import { adminApiRoutes } from './modules/admin/api-routes';
 import { adminUiRoutes } from './modules/admin/ui-routes';
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
   await fastify.register(webhookRoutes);
   await fastify.register(orangepillWebhookRoutes);
   await fastify.register(checkoutRoutes);
+  await fastify.register(checkoutUxRoutes);
   await fastify.register(adminApiRoutes);
   await fastify.register(adminUiRoutes);
   await fastify.register(replayRoutes);
