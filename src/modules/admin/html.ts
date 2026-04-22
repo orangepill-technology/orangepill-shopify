@@ -7,21 +7,24 @@ const STATUS_COLOR: Record<string, string> = {
   paid: '#008060',
   pending: '#916a00',
   processing: '#916a00',
+  retry_scheduled: '#2c6ecb',
   failed: '#d82c0d',
+  dead_letter: '#5c2d91',
   expired: '#8c9196',
 };
 
 function badge(status: Status): string {
   const color = STATUS_COLOR[status] ?? '#8c9196';
-  return `<span style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">${status}</span>`;
+  const label = status.replace('_', ' ');
+  return `<span style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">${label}</span>`;
 }
 
-function fmt(d: Date | string): string {
+function fmt(d: Date | string | null | undefined): string {
+  if (!d) return '—';
   return new Date(d).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'medium' });
 }
 
 function layout(title: string, shop: string, body: string, refreshMs = 10_000): string {
-  const host = ''; // passed in dynamically when embedding
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -52,12 +55,16 @@ function layout(title: string, shop: string, body: string, refreshMs = 10_000): 
     .stat-value.green{color:#008060}
     .stat-value.red{color:#d82c0d}
     .stat-value.yellow{color:#916a00}
-    .error-cell{color:#d82c0d;font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .stat-value.blue{color:#2c6ecb}
+    .stat-value.purple{color:#5c2d91}
+    .error-cell{color:#d82c0d;font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .btn{display:inline-block;padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;border:none;text-decoration:none}
     .btn-primary{background:#008060;color:#fff}
     .btn-primary:hover{background:#006e52}
     .btn-danger{background:#d82c0d;color:#fff}
     .btn-danger:hover{background:#bc2309}
+    .btn-purple{background:#5c2d91;color:#fff}
+    .btn-purple:hover{background:#4a2474}
     .filters{padding:12px 16px;background:#f9fafb;border-bottom:1px solid #e1e3e5;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     select,input{padding:6px 10px;border:1px solid #c9cccf;border-radius:4px;font-size:13px}
     .empty{padding:32px;text-align:center;color:#6d7175}
@@ -78,7 +85,8 @@ function layout(title: string, shop: string, body: string, refreshMs = 10_000): 
   <nav>
     <a href="/app?shop=${shop}" ${title === 'Overview' ? 'class="active"' : ''}>Overview</a>
     <a href="/app/events?shop=${shop}" ${title === 'Sync Events' ? 'class="active"' : ''}>Sync Events</a>
-    <a href="/app/events/failed?shop=${shop}" ${title === 'Failed Events' ? 'class="active"' : ''}>Failed Events</a>
+    <a href="/app/events/failed?shop=${shop}" ${title === 'Failed Events' ? 'class="active"' : ''}>Failed</a>
+    <a href="/app/events/dead-letters?shop=${shop}" ${title === 'Dead Letters' ? 'class="active"' : ''}>Dead Letters</a>
     <a href="/app/payments?shop=${shop}" ${title === 'Payments' ? 'class="active"' : ''}>Payments</a>
   </nav>
   <div class="container">
@@ -90,8 +98,20 @@ function layout(title: string, shop: string, body: string, refreshMs = 10_000): 
 }
 
 export interface HealthStats {
-  syncEvents: { pending: number; sent: number; failed: number };
-  payments: { pending: number; processing: number; paid: number; failed: number; expired: number };
+  syncEvents: {
+    pending: number;
+    sent: number;
+    failed: number;
+    retryScheduled: number;
+    deadLetter: number;
+  };
+  payments: {
+    pending: number;
+    processing: number;
+    paid: number;
+    failed: number;
+    expired: number;
+  };
   lastWebhookAt: Date | null;
 }
 
@@ -109,6 +129,8 @@ export function renderOverview(shop: string, stats: HealthStats, recentEvents: u
         <div class="stat"><div class="stat-label">Pending</div><div class="stat-value yellow">${stats.syncEvents.pending}</div></div>
         <div class="stat"><div class="stat-label">Sent</div><div class="stat-value green">${stats.syncEvents.sent}</div></div>
         <div class="stat"><div class="stat-label">Failed</div><div class="stat-value ${stats.syncEvents.failed > 0 ? 'red' : ''}">${stats.syncEvents.failed}</div></div>
+        <div class="stat"><div class="stat-label">Retry Scheduled</div><div class="stat-value ${stats.syncEvents.retryScheduled > 0 ? 'blue' : ''}">${stats.syncEvents.retryScheduled}</div></div>
+        <div class="stat"><div class="stat-label">Dead Letters</div><div class="stat-value ${stats.syncEvents.deadLetter > 0 ? 'purple' : ''}">${stats.syncEvents.deadLetter}</div></div>
       </div>
     </div>
 
@@ -160,11 +182,24 @@ export function renderEvents(
 ): string {
   const rows = events as Array<{
     id: string; eventType: string; resourceId: string; idempotencyKey: string;
-    status: string; attemptCount: number; lastError: string | null; createdAt: Date
+    status: string; attemptCount: number; lastError: string | null;
+    lastAttemptAt: Date | null; nextRetryAt: Date | null; createdAt: Date
   }>;
 
   const queryBase = (extra = '') =>
     `/app/events?shop=${shop}${statusFilter ? `&status=${statusFilter}` : ''}${eventTypeFilter ? `&eventType=${eventTypeFilter}` : ''}${extra}`;
+
+  const replayBtn = (e: typeof rows[0]) => {
+    if (e.status === 'failed' || e.status === 'retry_scheduled' || e.status === 'dead_letter') {
+      const cls = e.status === 'dead_letter' ? 'btn-purple' : 'btn-danger';
+      return `<form method="POST" action="/app/events/replay" style="display:inline">
+        <input type="hidden" name="eventId" value="${e.id}">
+        <input type="hidden" name="shop" value="${shop}">
+        <button class="btn ${cls}" type="submit">↺ Replay</button>
+      </form>`;
+    }
+    return '';
+  };
 
   const body = `
     <h1 style="font-size:20px;font-weight:700;margin:16px 0 12px">Sync Events</h1>
@@ -173,17 +208,21 @@ export function renderEvents(
         <input name="shop" value="${shop}" type="hidden">
         <select name="status" onchange="this.form.submit()">
           <option value="">All statuses</option>
-          ${['pending','sent','failed'].map((s) => `<option value="${s}" ${statusFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+          ${['pending','sent','failed','retry_scheduled','dead_letter'].map((s) =>
+            `<option value="${s}" ${statusFilter === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`
+          ).join('')}
         </select>
         <select name="eventType" onchange="this.form.submit()">
           <option value="">All types</option>
-          ${['order.finalized','order.refunded'].map((t) => `<option value="${t}" ${eventTypeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+          ${['order.finalized','order.refunded'].map((t) =>
+            `<option value="${t}" ${eventTypeFilter === t ? 'selected' : ''}>${t}</option>`
+          ).join('')}
         </select>
       </form>
       ${rows.length === 0
         ? '<div class="empty">No events match the current filter</div>'
         : `<table>
-          <thead><tr><th>Time</th><th>Type</th><th>Order</th><th>Status</th><th>Attempts</th><th>Error</th><th></th></tr></thead>
+          <thead><tr><th>Time</th><th>Type</th><th>Order</th><th>Status</th><th>Tries</th><th>Next retry</th><th>Error</th><th></th></tr></thead>
           <tbody>${rows.map((e) => `
             <tr>
               <td class="mono">${fmt(e.createdAt)}</td>
@@ -191,16 +230,9 @@ export function renderEvents(
               <td class="mono">${e.resourceId}</td>
               <td>${badge(e.status)}</td>
               <td style="text-align:center">${e.attemptCount}</td>
+              <td class="mono" style="font-size:11px">${fmt(e.nextRetryAt)}</td>
               <td class="error-cell" title="${e.lastError ?? ''}">${e.lastError ?? '—'}</td>
-              <td>
-                ${e.status === 'failed'
-                  ? `<form method="POST" action="/app/events/replay" style="display:inline">
-                      <input type="hidden" name="eventId" value="${e.id}">
-                      <input type="hidden" name="shop" value="${shop}">
-                      <button class="btn btn-danger" type="submit">Replay</button>
-                    </form>`
-                  : ''}
-              </td>
+              <td>${replayBtn(e)}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -215,25 +247,28 @@ export function renderEvents(
 export function renderFailedEvents(shop: string, events: unknown[]): string {
   const rows = events as Array<{
     id: string; eventType: string; resourceId: string; idempotencyKey: string;
-    status: string; attemptCount: number; lastError: string | null; createdAt: Date; updatedAt: Date
+    status: string; attemptCount: number; lastError: string | null;
+    nextRetryAt: Date | null; createdAt: Date; updatedAt: Date
   }>;
 
   const body = `
     <h1 style="font-size:20px;font-weight:700;margin:16px 0 12px">
-      Failed Events
+      Failed &amp; Retry Scheduled
       ${rows.length > 0 ? `<span style="background:#d82c0d;color:#fff;border-radius:20px;padding:2px 10px;font-size:14px;margin-left:8px">${rows.length}</span>` : ''}
     </h1>
     <div class="card">
       ${rows.length === 0
         ? '<div class="empty" style="color:#008060">✓ No failed events</div>'
         : `<table>
-          <thead><tr><th>Last attempt</th><th>Type</th><th>Order</th><th>Attempts</th><th>Error</th><th>Action</th></tr></thead>
+          <thead><tr><th>Last attempt</th><th>Type</th><th>Order</th><th>Status</th><th>Tries</th><th>Next retry</th><th>Error</th><th>Action</th></tr></thead>
           <tbody>${rows.map((e) => `
             <tr>
               <td class="mono">${fmt(e.updatedAt)}</td>
               <td>${e.eventType}</td>
               <td class="mono">${e.resourceId}</td>
+              <td>${badge(e.status)}</td>
               <td style="text-align:center">${e.attemptCount}</td>
+              <td class="mono" style="font-size:11px">${fmt(e.nextRetryAt)}</td>
               <td class="error-cell" title="${e.lastError ?? ''}">${e.lastError ?? '—'}</td>
               <td>
                 <form method="POST" action="/app/events/replay" style="display:inline">
@@ -248,6 +283,49 @@ export function renderFailedEvents(shop: string, events: unknown[]): string {
     </div>`;
 
   return layout('Failed Events', shop, body);
+}
+
+export function renderDeadLetters(shop: string, events: unknown[]): string {
+  const rows = events as Array<{
+    id: string; eventType: string; resourceId: string;
+    attemptCount: number; lastError: string | null;
+    deadLetteredAt: Date | null; updatedAt: Date
+  }>;
+
+  const body = `
+    <h1 style="font-size:20px;font-weight:700;margin:16px 0 12px">
+      Dead Letters
+      ${rows.length > 0 ? `<span style="background:#5c2d91;color:#fff;border-radius:20px;padding:2px 10px;font-size:14px;margin-left:8px">${rows.length}</span>` : ''}
+    </h1>
+    <p style="color:#6d7175;font-size:13px;margin-bottom:12px">
+      Events that exhausted all retry attempts or were classified as non-retryable.
+      Manual replay re-attempts delivery and reschedules if retryable.
+    </p>
+    <div class="card">
+      ${rows.length === 0
+        ? '<div class="empty" style="color:#008060">✓ No dead letters</div>'
+        : `<table>
+          <thead><tr><th>Dead-lettered</th><th>Type</th><th>Order</th><th>Attempts</th><th>Error</th><th>Action</th></tr></thead>
+          <tbody>${rows.map((e) => `
+            <tr>
+              <td class="mono">${fmt(e.deadLetteredAt ?? e.updatedAt)}</td>
+              <td>${e.eventType}</td>
+              <td class="mono">${e.resourceId}</td>
+              <td style="text-align:center">${e.attemptCount}</td>
+              <td class="error-cell" title="${e.lastError ?? ''}">${e.lastError ?? '—'}</td>
+              <td>
+                <form method="POST" action="/app/events/replay" style="display:inline">
+                  <input type="hidden" name="eventId" value="${e.id}">
+                  <input type="hidden" name="shop" value="${shop}">
+                  <button class="btn btn-purple" type="submit">↺ Replay</button>
+                </form>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`}
+    </div>`;
+
+  return layout('Dead Letters', shop, body);
 }
 
 export function renderPayments(shop: string, payments: unknown[], nextCursor: string | null): string {
@@ -294,5 +372,5 @@ export function renderReplayResult(shop: string, ok: boolean, error?: string): s
       </div>
     </div>`;
 
-  return layout('Replay', shop, body, 0); // no auto-refresh on result page
+  return layout('Replay', shop, body, 0);
 }

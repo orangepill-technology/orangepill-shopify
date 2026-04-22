@@ -1,10 +1,12 @@
 import { orangepillClient } from './client';
-import { markSent, markFailed, type JournalEntry } from '../sync/journal';
+import { markSent, scheduleRetry, markDeadLetter, type JournalEntry } from '../sync/journal';
+import { isRetryable } from '../sync/classifier';
+import { computeNextRetryAt, isExhausted } from '../sync/backoff';
 import { logger } from '../../logger';
 import type { OrangepillEvent } from './types';
 
 export class ShopifyEventEmitterService {
-  // Never throws. Failures are recorded in the journal for replay.
+  // Never throws. Failures are classified and either scheduled for retry or dead-lettered.
   async emit(entry: JournalEntry): Promise<void> {
     const payload = entry.payloadJson as OrangepillEvent;
     const result = await orangepillClient.emitEvent(payload, entry.idempotencyKey);
@@ -12,12 +14,23 @@ export class ShopifyEventEmitterService {
     if (result.success) {
       await markSent(entry.id);
       logger.info({ id: entry.id, eventType: entry.eventType }, 'event_sent');
-    } else {
-      const error = result.error ?? 'unknown';
-      await markFailed(entry.id, error);
+      return;
+    }
+
+    const error = result.error ?? 'unknown';
+    const newAttemptCount = entry.attemptCount + 1;
+
+    if (isExhausted(newAttemptCount) || !isRetryable(error, result.status)) {
+      await markDeadLetter(entry.id, error);
       logger.error(
         { id: entry.id, eventType: entry.eventType, error, httpStatus: result.status },
-        'event_failed',
+        'event_dead_lettered',
+      );
+    } else {
+      await scheduleRetry(entry.id, error, computeNextRetryAt(newAttemptCount));
+      logger.warn(
+        { id: entry.id, eventType: entry.eventType, error, httpStatus: result.status },
+        'event_retry_scheduled',
       );
     }
   }
