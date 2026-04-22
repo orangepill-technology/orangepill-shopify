@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { createOrGetCheckoutSession } from './service';
 import { isValidShopDomain } from '../auth/service';
+import { config } from '../../config';
 import { logger } from '../../logger';
 
 interface CreateSessionBody {
@@ -9,6 +10,8 @@ interface CreateSessionBody {
 }
 
 export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
+  // Called by Shopify payment provider flow. Returns a redirect to /checkout/prepare
+  // so the customer sees the preparation UX before landing on Orangepill checkout.
   fastify.post<{ Body: CreateSessionBody }>('/checkout/create-session', async (request, reply) => {
     const { shopDomain, orderId } = request.body ?? {};
 
@@ -21,20 +24,12 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       const result = await createOrGetCheckoutSession(shopDomain, String(orderId));
-      return reply.code(200).send({ redirectUrl: result.redirectUrl, sessionId: result.sessionId });
+      // Return the prepare page URL — customer lands there first before being sent to OP checkout
+      const prepareUrl = `${config.APP_URL}/checkout/prepare?shop=${encodeURIComponent(shopDomain)}&orderId=${encodeURIComponent(orderId)}`;
+      return reply.code(200).send({ redirectUrl: prepareUrl, sessionId: result.sessionId });
     } catch (err) {
       logger.error({ err, shopDomain, orderId }, 'checkout_create_session_error');
       return reply.code(500).send({ error: 'Failed to create checkout session' });
     }
-  });
-
-  // Landing page after Orangepill hosted checkout completes.
-  // Truth comes from the webhook — this is UX only.
-  fastify.get<{ Querystring: { shop?: string } }>('/checkout/success', async (request, reply) => {
-    const { shop } = request.query;
-    if (shop && isValidShopDomain(shop)) {
-      return reply.redirect(`https://${shop}/orders`);
-    }
-    return reply.code(200).send({ status: 'Payment received' });
   });
 }

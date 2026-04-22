@@ -6,8 +6,12 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 
 export interface CreateSessionResult {
-  redirectUrl: string;
+  redirectUrl: string;     // Orangepill hosted checkout URL
   sessionId: string;
+  amount: string;
+  currency: string;
+  orderAmount?: string | null;
+  orderCurrency?: string | null;
 }
 
 export async function createOrGetCheckoutSession(
@@ -27,53 +31,97 @@ export async function createOrGetCheckoutSession(
   if (existing) {
     switch (existing.status) {
       case 'pending':
-      case 'processing': // in-flight — return the same session
+      case 'processing':
         logger.info({ shopDomain, orderId, sessionId: existing.orangepillSessionId }, 'checkout_session_reused');
-        return { redirectUrl: existing.checkoutUrl, sessionId: existing.orangepillSessionId };
+        return {
+          redirectUrl: existing.checkoutUrl,
+          sessionId: existing.orangepillSessionId,
+          amount: existing.amount,
+          currency: existing.currency,
+          orderAmount: existing.orderAmount,
+          orderCurrency: existing.orderCurrency,
+        };
 
       case 'paid':
         throw new Error(`Order ${orderId} is already paid`);
 
       case 'failed':
       case 'expired':
-        // Retry: create a new OP session and update the existing row in-place
         return await refreshSession(shop.id, shopDomain, orderId, existing.id);
     }
   }
 
-  // No existing row — create
   try {
     return await createSession(shop.id, shopDomain, orderId);
   } catch (err: unknown) {
-    // Concurrent request won the insert race — return their session
     if ((err as { code?: string })?.code === 'P2002') {
       const concurrent = await prisma.shopifyOrderPayment.findUnique({
         where: { shopId_shopifyOrderId: { shopId: shop.id, shopifyOrderId: orderId } },
       });
       if (concurrent) {
-        return { redirectUrl: concurrent.checkoutUrl, sessionId: concurrent.orangepillSessionId };
+        return {
+          redirectUrl: concurrent.checkoutUrl,
+          sessionId: concurrent.orangepillSessionId,
+          amount: concurrent.amount,
+          currency: concurrent.currency,
+          orderAmount: concurrent.orderAmount,
+          orderCurrency: concurrent.orderCurrency,
+        };
       }
     }
     throw err;
   }
 }
 
+// Returns stored payment display info without creating a new session.
+export async function getPaymentDisplayInfo(
+  shopDomain: string,
+  orderId: string,
+): Promise<{
+  status: string;
+  amount: string;
+  currency: string;
+  orderAmount?: string | null;
+  orderCurrency?: string | null;
+} | null> {
+  const shop = await prisma.shop.findUnique({
+    where: { shopDomain },
+    select: { id: true },
+  });
+  if (!shop) return null;
+
+  const payment = await prisma.shopifyOrderPayment.findUnique({
+    where: { shopId_shopifyOrderId: { shopId: shop.id, shopifyOrderId: orderId } },
+    select: { status: true, amount: true, currency: true, orderAmount: true, orderCurrency: true },
+  });
+
+  return payment;
+}
+
+function confirmingUrl(shopDomain: string, orderId: string): string {
+  return `${config.APP_URL}/checkout/confirming?shop=${encodeURIComponent(shopDomain)}&orderId=${encodeURIComponent(orderId)}`;
+}
+
 async function buildAndCreateOPSession(
   shopDomain: string,
   orderId: string,
-): Promise<{ checkout_url: string; id: string; amount: string; currency: string }> {
+  idempotencyKey: string,
+): Promise<{
+  session: { checkout_url: string; id: string; amount: string; currency: string };
+  order: { total_price: string; currency: string };
+}> {
   const order = await fetchShopifyOrder(shopDomain, orderId);
   const session = await orangepillCheckoutClient.createCheckoutSession(
     mapOrderToSessionPayload(
       order,
       shopDomain,
       config.ORANGEPILL_MERCHANT_ID,
-      `${config.APP_URL}/checkout/success`,
+      confirmingUrl(shopDomain, orderId),
       `https://${shopDomain}`,
     ),
-    `shopify:${shopDomain}:order:${orderId}:checkout`,
+    idempotencyKey,
   );
-  return session;
+  return { session, order };
 }
 
 async function createSession(
@@ -81,7 +129,11 @@ async function createSession(
   shopDomain: string,
   orderId: string,
 ): Promise<CreateSessionResult> {
-  const session = await buildAndCreateOPSession(shopDomain, orderId);
+  const { session, order } = await buildAndCreateOPSession(
+    shopDomain,
+    orderId,
+    `shopify:${shopDomain}:order:${orderId}:checkout`,
+  );
 
   await prisma.shopifyOrderPayment.create({
     data: {
@@ -91,12 +143,21 @@ async function createSession(
       checkoutUrl: session.checkout_url,
       amount: session.amount,
       currency: session.currency,
+      orderAmount: order.total_price,
+      orderCurrency: order.currency,
       status: 'pending',
     },
   });
 
   logger.info({ shopDomain, orderId, sessionId: session.id }, 'checkout_session_created');
-  return { redirectUrl: session.checkout_url, sessionId: session.id };
+  return {
+    redirectUrl: session.checkout_url,
+    sessionId: session.id,
+    amount: session.amount,
+    currency: session.currency,
+    orderAmount: order.total_price,
+    orderCurrency: order.currency,
+  };
 }
 
 async function refreshSession(
@@ -105,19 +166,8 @@ async function refreshSession(
   orderId: string,
   existingId: string,
 ): Promise<CreateSessionResult> {
-  // Idempotency key must differ from the original attempt so OP creates a new session
   const retryKey = `shopify:${shopDomain}:order:${orderId}:checkout:retry:${Date.now()}`;
-  const order = await fetchShopifyOrder(shopDomain, orderId);
-  const session = await orangepillCheckoutClient.createCheckoutSession(
-    mapOrderToSessionPayload(
-      order,
-      shopDomain,
-      config.ORANGEPILL_MERCHANT_ID,
-      `${config.APP_URL}/checkout/success`,
-      `https://${shopDomain}`,
-    ),
-    retryKey,
-  );
+  const { session, order } = await buildAndCreateOPSession(shopDomain, orderId, retryKey);
 
   await prisma.shopifyOrderPayment.update({
     where: { id: existingId },
@@ -126,6 +176,8 @@ async function refreshSession(
       checkoutUrl: session.checkout_url,
       amount: session.amount,
       currency: session.currency,
+      orderAmount: order.total_price,
+      orderCurrency: order.currency,
       status: 'pending',
       shopifyTransactionId: null,
       orangepillPaymentId: null,
@@ -133,5 +185,12 @@ async function refreshSession(
   });
 
   logger.info({ shopDomain, orderId, sessionId: session.id }, 'checkout_session_refreshed');
-  return { redirectUrl: session.checkout_url, sessionId: session.id };
+  return {
+    redirectUrl: session.checkout_url,
+    sessionId: session.id,
+    amount: session.amount,
+    currency: session.currency,
+    orderAmount: order.total_price,
+    orderCurrency: order.currency,
+  };
 }
