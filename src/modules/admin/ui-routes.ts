@@ -7,6 +7,7 @@ import {
   renderOverview,
   renderEvents,
   renderFailedEvents,
+  renderDeadLetters,
   renderPayments,
   renderReplayResult,
 } from './html';
@@ -31,7 +32,6 @@ async function resolveShop(
 }
 
 export async function adminUiRoutes(fastify: FastifyInstance): Promise<void> {
-  // Shopify sends form POSTs — need formbody parser scoped to this plugin
   await fastify.register(import('@fastify/formbody'));
 
   fastify.get('/app', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -75,11 +75,27 @@ export async function adminUiRoutes(fastify: FastifyInstance): Promise<void> {
     const resolved = await resolveShop(q.shop ?? '', reply);
     if (!resolved) return;
 
-    const events = await listSyncEvents({ shopId: resolved.id, status: 'failed', limit: 200 });
+    // Show both immediately-failed and retry-scheduled together
+    const [failed, retryScheduled] = await Promise.all([
+      listSyncEvents({ shopId: resolved.id, status: 'failed', limit: 200 }),
+      listSyncEvents({ shopId: resolved.id, status: 'retry_scheduled', limit: 200 }),
+    ]);
+    const events = [...failed, ...retryScheduled].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+
     return reply.type('text/html').send(renderFailedEvents(q.shop!, events));
   });
 
-  // Replay form action — POST from the UI replay buttons
+  fastify.get('/app/events/dead-letters', async (request: FastifyRequest, reply: FastifyReply) => {
+    const q = request.query as Record<string, string>;
+    const resolved = await resolveShop(q.shop ?? '', reply);
+    if (!resolved) return;
+
+    const events = await listSyncEvents({ shopId: resolved.id, status: 'dead_letter', limit: 200 });
+    return reply.type('text/html').send(renderDeadLetters(q.shop!, events));
+  });
+
   fastify.post('/app/events/replay', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as { eventId?: string; shop?: string };
     const shop = body.shop ?? '';

@@ -10,6 +10,7 @@ import { adminApiRoutes } from './modules/admin/api-routes';
 import { adminUiRoutes } from './modules/admin/ui-routes';
 import { healthRoutes } from './routes/health';
 import { replayRoutes } from './routes/replay';
+import { retryWorker } from './modules/sync/retry-worker';
 
 const fastify = Fastify({
   logger: false,
@@ -28,10 +29,12 @@ async function main(): Promise<void> {
 
   await fastify.listen({ port: config.PORT, host: config.HOST });
   logger.info({ port: config.PORT, host: config.HOST }, 'server_started');
+  retryWorker.start();
 }
 
 const shutdown = async (): Promise<void> => {
   logger.info('shutting_down');
+  retryWorker.stop();
   await fastify.close();
   process.exit(0);
 };

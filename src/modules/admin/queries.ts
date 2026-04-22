@@ -26,7 +26,7 @@ export async function listSyncEvents(filter: EventFilter) {
       ...(filter.cursor ? { id: { lt: filter.cursor } } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: limit + 1, // fetch one extra to determine if there's a next page
+    take: limit + 1,
     select: {
       id: true,
       shopId: true,
@@ -36,6 +36,9 @@ export async function listSyncEvents(filter: EventFilter) {
       status: true,
       attemptCount: true,
       lastError: true,
+      lastAttemptAt: true,
+      nextRetryAt: true,
+      deadLetteredAt: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -88,6 +91,8 @@ export async function getHealthStats() {
       pending: syncStats['pending'] ?? 0,
       sent: syncStats['sent'] ?? 0,
       failed: syncStats['failed'] ?? 0,
+      retryScheduled: syncStats['retry_scheduled'] ?? 0,
+      deadLetter: syncStats['dead_letter'] ?? 0,
     },
     payments: {
       pending: paymentStats['pending'] ?? 0,

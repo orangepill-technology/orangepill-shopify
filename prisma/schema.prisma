@@ -42,25 +42,30 @@ model ShopifyWebhook {
 // (shopId, direction, eventType, idempotencyKey) is the ONLY thing that prevents
 // double-billing — never remove it.
 model ShopifySyncEvent {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   shopId         String
-  direction      String   // 'shopify_to_op'
-  eventType      String   // 'order.finalized' | 'order.refunded'
+  direction      String    // 'shopify_to_op'
+  eventType      String    // 'order.finalized' | 'order.refunded'
   resourceId     String
   payloadJson    Json
-  endpoint       String   // frozen at record time
+  endpoint       String    // frozen at record time
   idempotencyKey String
-  status         String   @default("pending") // 'pending' | 'sent' | 'failed'
-  attemptCount   Int      @default(0)
+  status         String    @default("pending") // 'pending' | 'sent' | 'failed' | 'retry_scheduled' | 'dead_letter'
+  attemptCount   Int       @default(0)
   lastError      String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  lastAttemptAt  DateTime?
+  nextRetryAt    DateTime?
+  deadLetteredAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id])
 
   @@unique([shopId, direction, eventType, idempotencyKey])
   @@index([shopId, status])
   @@index([shopId, createdAt])
+  @@index([shopId, status, nextRetryAt])
+  @@index([status, nextRetryAt])
   @@map("shopify_sync_events")
 }
 

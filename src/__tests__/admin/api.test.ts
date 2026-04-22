@@ -4,6 +4,7 @@ jest.mock('../../modules/db/client', () => ({
       findMany: jest.fn(),
       findUnique: jest.fn(),
       groupBy: jest.fn(),
+      findFirst: jest.fn(),
     },
     shopifyOrderPayment: {
       findMany: jest.fn(),
@@ -187,5 +188,45 @@ describe('Admin JSON API', () => {
     expect(mockFindPayments).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ status: 'failed' }) }),
     );
+  });
+
+  // ── New status filters ────────────────────────────────────────────────────
+
+  it('filters events by retry_scheduled status', async () => {
+    mockFindEvents.mockResolvedValue([]);
+
+    await app.inject({ method: 'GET', url: '/internal/events?status=retry_scheduled', headers: AUTH });
+    expect(mockFindEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: 'retry_scheduled' }) }),
+    );
+  });
+
+  it('filters events by dead_letter status', async () => {
+    mockFindEvents.mockResolvedValue([]);
+
+    await app.inject({ method: 'GET', url: '/internal/events?status=dead_letter', headers: AUTH });
+    expect(mockFindEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: 'dead_letter' }) }),
+    );
+  });
+
+  it('returns retry_scheduled events in paginated list', async () => {
+    mockFindEvents.mockResolvedValue([
+      makeEvent({ status: 'retry_scheduled', nextRetryAt: new Date() }),
+    ]);
+
+    const res = await app.inject({ method: 'GET', url: '/internal/events?status=retry_scheduled', headers: AUTH });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().events[0].status).toBe('retry_scheduled');
+  });
+
+  it('returns dead_letter events in paginated list', async () => {
+    mockFindEvents.mockResolvedValue([
+      makeEvent({ status: 'dead_letter', deadLetteredAt: new Date() }),
+    ]);
+
+    const res = await app.inject({ method: 'GET', url: '/internal/events?status=dead_letter', headers: AUTH });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().events[0].status).toBe('dead_letter');
   });
 });
