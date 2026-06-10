@@ -1,0 +1,56 @@
+{% comment %}
+  Orangepill WhatsApp CTA Block
+  Place this block inside any section on the product page template.
+  The button text is configurable per-block; the phone number / flow ID
+  is pulled from Orangepill app settings at runtime (never in Liquid).
+{% endcomment %}
+
+{%- if block.settings.enable_whatsapp -%}
+  <div
+    id="op-wa-{{ block.id }}"
+    data-op-block="whatsapp-button"
+    data-shop="{{ shop.permanent_domain }}"
+    data-proxy-base="{{ routes.root_url }}apps/orangepill"
+    data-enabled="{{ block.settings.enable_whatsapp }}"
+    data-button-text="{{ block.settings.button_text | escape }}"
+    style="width:100%;margin-top:{{ block.settings.margin_top }}px;"
+    {{ block.shopify_attributes }}
+  ></div>
+
+  {{ 'orangepill.js' | asset_url | script_tag }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "WhatsApp Button",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_whatsapp",
+      "label": "Enable WhatsApp button",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Consultar por WhatsApp"
+    },
+    {
+      "type": "range",
+      "id": "margin_top",
+      "label": "Margin above button (px)",
+      "min": 0,
+      "max": 32,
+      "step": 4,
+      "default": 8
+    }
+  ],
+  "presets": [
+    {
+      "name": "WhatsApp Button"
+    }
+  ]
+}
+{% endschema %}

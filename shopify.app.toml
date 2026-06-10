@@ -1,0 +1,24 @@
+# Shopify CLI app configuration.
+# Replace client_id with the value from your Shopify Partner dashboard.
+# Run `shopify app deploy` to push extension changes to Shopify.
+name = "Orangepill"
+client_id = "YOUR_SHOPIFY_API_KEY"
+application_url = "https://your-app-url.example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,read_customers"
+
+[auth]
+redirect_urls = [
+  "https://your-app-url.example.com/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-01"
+
+[pos]
+embedded = false
+
+[[extensions]]
+path = "extensions/orangepill-storefront"

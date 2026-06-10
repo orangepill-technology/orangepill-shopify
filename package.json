@@ -1,6 +1,6 @@
 {
   "name": "@orangepill/shopify-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
@@ -15,7 +15,9 @@
     "db:push": "prisma db push",
     "test": "jest",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "extension:deploy": "shopify app deploy",
+    "extension:dev": "shopify app dev"
   },
   "dependencies": {
     "@fastify/formbody": "^8.0.2",

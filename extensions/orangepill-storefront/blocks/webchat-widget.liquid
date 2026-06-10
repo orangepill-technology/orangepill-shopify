@@ -1,0 +1,71 @@
+{% comment %}
+  Orangepill Webchat Widget Block
+  Place this block in the footer section or any global section.
+  The embed URL and entrypoint ID are set in Orangepill app settings.
+{% endcomment %}
+
+{%- if block.settings.enable_webchat -%}
+  <div
+    id="op-wc-{{ block.id }}"
+    data-op-block="webchat-widget"
+    data-shop="{{ shop.permanent_domain }}"
+    data-proxy-base="{{ routes.root_url }}apps/orangepill"
+    data-enabled="{{ block.settings.enable_webchat }}"
+    data-entrypoint="{{ block.settings.entrypoint_id | escape }}"
+    data-embed-url="{{ block.settings.embed_url | escape }}"
+    style="position:fixed;bottom:{{ block.settings.bottom_offset }}px;right:{{ block.settings.right_offset }}px;z-index:9999;"
+    {{ block.shopify_attributes }}
+  ></div>
+
+  {{ 'orangepill.js' | asset_url | script_tag }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Webchat Widget",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_webchat",
+      "label": "Enable webchat widget",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "entrypoint_id",
+      "label": "Orangepill entrypoint ID",
+      "info": "Copy from the Orangepill app settings page."
+    },
+    {
+      "type": "url",
+      "id": "embed_url",
+      "label": "Embed script URL",
+      "info": "Copy from the Orangepill app settings page."
+    },
+    {
+      "type": "range",
+      "id": "bottom_offset",
+      "label": "Bottom offset (px)",
+      "min": 8,
+      "max": 64,
+      "step": 4,
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "right_offset",
+      "label": "Right offset (px)",
+      "min": 8,
+      "max": 64,
+      "step": 4,
+      "default": 16
+    }
+  ],
+  "presets": [
+    {
+      "name": "Webchat Widget"
+    }
+  ]
+}
+{% endschema %}
