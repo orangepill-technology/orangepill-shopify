@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { fetchShopifyOrder } from '../shopify/orders';
 import { mapOrderToSessionPayload } from './mapper';
 import { orangepillCheckoutClient } from '../orangepill/checkout-client';
+import { upsertOrderAttribution } from '../attribution/service';
 import { config } from '../../config';
 import { logger } from '../../logger';
 
@@ -157,6 +158,8 @@ async function createSession(
       status: 'pending',
     },
   });
+
+  await upsertOrderAttribution(shopId, orderId, attribution.conversationId, attribution.channelSessionId, 'checkout_session');
 
   logger.info({ shopDomain, orderId, sessionId: session.id }, 'checkout_session_created');
   return {

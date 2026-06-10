@@ -23,7 +23,7 @@ describe('mapOrderFinalized', () => {
         phone: '+385911234567',
         shopify_customer_id: 67890,
       },
-      metadata: { channel: 'shopify', shop_domain: SHOP },
+      metadata: { channel: 'shopify', shop_domain: SHOP, conversation_id: null, channel_session_id: null },
     });
   });
 

@@ -19,6 +19,7 @@ model Shop {
   webhooks      ShopifyWebhook[]
   syncEvents    ShopifySyncEvent[]
   orderPayments ShopifyOrderPayment[]
+  attributions  ShopifyOrderAttribution[]
   settings      ShopSettings?
 
   @@map("shops")
@@ -40,6 +41,25 @@ model ShopSettings {
   updatedAt           DateTime @updatedAt
 
   @@map("shop_settings")
+}
+
+// Order-level conversation attribution. Written at checkout creation time and
+// by future agent/WhatsApp order entry points. Looked up when orders/paid fires
+// so conversationId + channelSessionId travel to Orangepill with the order event.
+model ShopifyOrderAttribution {
+  id               String   @id @default(uuid())
+  shopId           String
+  shopifyOrderId   String
+  conversationId   String?
+  channelSessionId String?
+  source           String   // 'checkout_session' | 'agent' | 'manual'
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, shopifyOrderId])
+  @@map("shopify_order_attributions")
 }
 
 model ShopifyWebhook {

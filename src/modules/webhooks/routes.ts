@@ -5,6 +5,7 @@ import { mapOrderFinalized, mapOrderRefunded } from '../orangepill/mapper';
 import { recordEvent } from '../sync/journal';
 import { emitter } from '../orangepill/emitter';
 import { uninstallShop } from '../auth/service';
+import { getOrderAttribution } from '../attribution/service';
 import { prisma } from '../db/client';
 import { logger } from '../../logger';
 import type { ShopifyOrder, ShopifyRefund } from '../orangepill/types';
@@ -64,7 +65,8 @@ export async function webhookRoutes(fastify: FastifyInstance): Promise<void> {
       case 'orders/paid': {
         const order = body as unknown as ShopifyOrder;
         const idempotencyKey = `shopify:${order.id}:order.finalized`;
-        const payload = mapOrderFinalized(order, shopDomain);
+        const attribution = await getOrderAttribution(shop.id, String(order.id));
+        const payload = mapOrderFinalized(order, shopDomain, attribution);
         const { entry, isNew } = await recordEvent(
           shop.id,
           'order.finalized',

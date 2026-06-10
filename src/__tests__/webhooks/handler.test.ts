@@ -24,6 +24,10 @@ jest.mock('../../modules/auth/service', () => ({
   uninstallShop: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../../modules/attribution/service', () => ({
+  getOrderAttribution: jest.fn().mockResolvedValue(null),
+}));
+
 import { webhookRoutes } from '../../modules/webhooks/routes';
 import { prisma } from '../../modules/db/client';
 import { recordEvent } from '../../modules/sync/journal';
