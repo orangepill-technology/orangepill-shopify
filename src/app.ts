@@ -12,6 +12,9 @@ import { adminUiRoutes } from './modules/admin/ui-routes';
 import { healthRoutes } from './routes/health';
 import { replayRoutes } from './routes/replay';
 import { retryWorker } from './modules/sync/retry-worker';
+import { settingsRoutes } from './modules/settings/routes';
+import { identityRoutes } from './modules/identity/routes';
+import { storefrontRoutes } from './modules/storefront/routes';
 
 const fastify = Fastify({
   logger: false,
@@ -28,6 +31,9 @@ async function main(): Promise<void> {
   await fastify.register(adminApiRoutes);
   await fastify.register(adminUiRoutes);
   await fastify.register(replayRoutes);
+  await fastify.register(settingsRoutes);
+  await fastify.register(identityRoutes);
+  await fastify.register(storefrontRoutes);
 
   await fastify.listen({ port: config.PORT, host: config.HOST });
   logger.info({ port: config.PORT, host: config.HOST }, 'server_started');

@@ -10,7 +10,9 @@ import {
   renderDeadLetters,
   renderPayments,
   renderReplayResult,
+  renderSettings,
 } from './html';
+import { getShopSettings, upsertShopSettings } from '../settings/service';
 
 async function resolveShop(
   shopDomain: string,
@@ -107,6 +109,42 @@ export async function adminUiRoutes(fastify: FastifyInstance): Promise<void> {
 
     const result = await replay(eventId);
     return reply.type('text/html').send(renderReplayResult(shop, result.ok, result.error));
+  });
+
+  fastify.get('/app/settings', async (request: FastifyRequest, reply: FastifyReply) => {
+    const q = request.query as Record<string, string>;
+    const resolved = await resolveShop(q.shop ?? '', reply);
+    if (!resolved) return;
+
+    const settings = await getShopSettings(resolved.id);
+    return reply.type('text/html').send(renderSettings(q.shop!, {
+      ...settings,
+      identitySecretSet: settings.identitySecret !== null,
+    }));
+  });
+
+  fastify.post('/app/settings', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, string>;
+    const shop = body.shop ?? '';
+    const resolved = await resolveShop(shop, reply);
+    if (!resolved) return;
+
+    await upsertShopSettings(resolved.id, {
+      webchatEnabled: body.webchatEnabled === '1',
+      webchatEntrypointId: body.webchatEntrypointId || null,
+      webchatEmbedUrl: body.webchatEmbedUrl || null,
+      whatsappEnabled: body.whatsappEnabled === '1',
+      whatsappNumber: body.whatsappNumber || null,
+      whatsappFlowId: body.whatsappFlowId || null,
+      // Only update secret if a new non-empty value was submitted
+      ...(body.identitySecret ? { identitySecret: body.identitySecret } : {}),
+    });
+
+    const settings = await getShopSettings(resolved.id);
+    return reply.type('text/html').send(renderSettings(shop, {
+      ...settings,
+      identitySecretSet: settings.identitySecret !== null,
+    }, true));
   });
 
   fastify.get('/app/payments', async (request: FastifyRequest, reply: FastifyReply) => {
