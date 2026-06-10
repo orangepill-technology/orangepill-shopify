@@ -1,14 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../db/client';
 import { generateIdentityToken } from './service';
+import { getShopSettings } from '../settings/service';
 
-// App Proxy route: GET /apps/orangepill/identity
-// Shopify forwards ?shop=... and (if logged in) ?logged_in_customer_id=...
-// plus an HMAC signature that Shopify's App Proxy middleware already verified upstream.
-//
-// Returns a short-lived HMAC-signed identity token — safe to pass to client JS
-// because the HMAC secret never leaves the server.
+// App Proxy routes: /apps/orangepill/...
+// Shopify verifies the HMAC signature before forwarding requests here,
+// so these endpoints are safe to call from storefront JS.
 export async function identityRoutes(app: FastifyInstance): Promise<void> {
+  // GET /apps/orangepill/identity
+  // Returns a short-lived HMAC-signed identity token.
+  // The HMAC secret never leaves the server.
   app.get('/apps/orangepill/identity', async (req, reply) => {
     const query = req.query as Record<string, string>;
     const shopDomain = query.shop;
@@ -17,8 +18,6 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
     const shopRow = await prisma.shop.findUnique({ where: { shopDomain } });
     if (!shopRow) return reply.status(404).send({ error: 'Shop not found' });
 
-    // Shopify injects logged_in_customer_id when the visitor is authenticated.
-    // All other customer fields come from the storefront JS via query params.
     const customerId = query.logged_in_customer_id ?? null;
     const customer = customerId
       ? {
@@ -31,6 +30,33 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
       : null;
 
     const token = await generateIdentityToken(shopRow.id, shopDomain, customer);
-    return reply.send({ token });
+    return reply
+      .header('Cache-Control', 'no-store')
+      .send({ token });
+  });
+
+  // GET /apps/orangepill/settings
+  // Returns the public (non-secret) shop configuration for the storefront JS.
+  // Only exposes what the JS actually needs — secrets never sent.
+  app.get('/apps/orangepill/settings', async (req, reply) => {
+    const query = req.query as Record<string, string>;
+    const shopDomain = query.shop;
+    if (!shopDomain) return reply.status(400).send({ error: 'Missing shop' });
+
+    const shopRow = await prisma.shop.findUnique({ where: { shopDomain } });
+    if (!shopRow) return reply.status(404).send({ error: 'Shop not found' });
+
+    const settings = await getShopSettings(shopRow.id);
+    return reply
+      .header('Cache-Control', 'public, max-age=60')
+      .send({
+        webchatEnabled: settings.webchatEnabled,
+        webchatEntrypointId: settings.webchatEntrypointId,
+        webchatEmbedUrl: settings.webchatEmbedUrl,
+        whatsappEnabled: settings.whatsappEnabled,
+        whatsappNumber: settings.whatsappNumber,
+        whatsappFlowId: settings.whatsappFlowId,
+        // identitySecret intentionally omitted
+      });
   });
 }

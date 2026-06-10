@@ -1,0 +1,45 @@
+# Shopify CLI — App-level deployment config.
+#
+# This file is committed once per environment:
+#   staging  → client_id = staging Shopify app key
+#   prod     → client_id = production Shopify app key
+#
+# Per-store behavior (WhatsApp target, webchat entrypoint, tenant mapping)
+# is NOT configured here. It comes from the ShopSettings DB row that is
+# created when each merchant installs the app and opens /app/settings.
+#
+# Deployment model:
+#   1. Set client_id + application_url for the target environment
+#   2. Run `npm run extension:deploy` once → extension is published to the Shopify app
+#   3. Every merchant that installs the app can then add the extension blocks
+#      to their theme via the Shopify theme editor
+#   4. Each store's blocks call /apps/orangepill/settings?shop=<domain> at runtime
+#      → server returns that store's ShopSettings row (whatsapp config, webchat config)
+#
+# To set up a new environment:
+#   export SHOPIFY_API_KEY=<key-from-partner-dashboard>
+#   export APP_URL=<backend-url>
+#   then update the two fields below and commit a shopify.app.staging.toml
+#   or shopify.app.production.toml (use --config flag with shopify CLI).
+
+name = "Orangepill"
+client_id = "YOUR_SHOPIFY_API_KEY"
+application_url = "https://your-app-url.example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,read_customers"
+
+[auth]
+redirect_urls = [
+  "https://your-app-url.example.com/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-01"
+
+[pos]
+embedded = false
+
+[[extensions]]
+path = "extensions/orangepill-storefront"
