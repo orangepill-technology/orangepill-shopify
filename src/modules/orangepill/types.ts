@@ -12,6 +12,8 @@ export interface OrderFinalizedEvent {
   metadata: {
     channel: 'shopify';
     shop_domain: string;
+    conversation_id?: string | null;
+    channel_session_id?: string | null;
   };
 }
 
