@@ -88,6 +88,7 @@ function layout(title: string, shop: string, body: string, refreshMs = 10_000): 
     <a href="/app/events/failed?shop=${shop}" ${title === 'Failed Events' ? 'class="active"' : ''}>Failed</a>
     <a href="/app/events/dead-letters?shop=${shop}" ${title === 'Dead Letters' ? 'class="active"' : ''}>Dead Letters</a>
     <a href="/app/payments?shop=${shop}" ${title === 'Payments' ? 'class="active"' : ''}>Payments</a>
+    <a href="/app/settings?shop=${shop}" ${title === 'Settings' ? 'class="active"' : ''}>Settings</a>
   </nav>
   <div class="container">
     ${body}
@@ -359,6 +360,81 @@ export function renderPayments(shop: string, payments: unknown[], nextCursor: st
     </div>`;
 
   return layout('Payments', shop, body);
+}
+
+export interface SettingsFormData {
+  webchatEnabled: boolean;
+  webchatEntrypointId: string | null;
+  webchatEmbedUrl: string | null;
+  whatsappEnabled: boolean;
+  whatsappNumber: string | null;
+  whatsappFlowId: string | null;
+  identitySecretSet: boolean;
+}
+
+export function renderSettings(shop: string, data: SettingsFormData, saved = false): string {
+  const v = (val: string | null | undefined) => val ?? '';
+  const checked = (b: boolean) => (b ? 'checked' : '');
+
+  const body = `
+    <h1 style="font-size:20px;font-weight:700;margin:16px 0 12px">Settings</h1>
+    ${saved ? '<div style="background:#d3f5e3;border:1px solid #95c9a7;border-radius:6px;padding:10px 16px;color:#1a6b3e;margin-bottom:12px;font-size:13px">Settings saved.</div>' : ''}
+    <form method="POST" action="/app/settings">
+      <input type="hidden" name="shop" value="${shop}">
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">Webchat</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px">
+            <input type="checkbox" name="webchatEnabled" value="1" ${checked(data.webchatEnabled)}> Enable webchat widget
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Entrypoint ID
+            <input name="webchatEntrypointId" value="${v(data.webchatEntrypointId)}" placeholder="op-entrypoint-..." style="max-width:360px">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Embed script URL
+            <input name="webchatEmbedUrl" value="${v(data.webchatEmbedUrl)}" placeholder="https://..." style="max-width:480px">
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">WhatsApp CTA</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px">
+            <input type="checkbox" name="whatsappEnabled" value="1" ${checked(data.whatsappEnabled)}> Enable WhatsApp button
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            WhatsApp number (E.164, e.g. +573001234567)
+            <input name="whatsappNumber" value="${v(data.whatsappNumber)}" placeholder="+57..." style="max-width:240px">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Orangepill Flow entrypoint ID (overrides number if set)
+            <input name="whatsappFlowId" value="${v(data.whatsappFlowId)}" placeholder="op-flow-..." style="max-width:360px">
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">Identity token</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <p style="font-size:13px;color:#6d7175">
+            HMAC secret used to sign identity tokens delivered to the storefront.
+            Once set the secret value is never displayed again. Leave blank to keep the current value.
+            ${data.identitySecretSet ? '<span style="background:#d3f5e3;border-radius:4px;padding:1px 6px;font-size:12px;color:#1a6b3e">Secret is set</span>' : '<span style="background:#fff4e4;border-radius:4px;padding:1px 6px;font-size:12px;color:#916a00">Not set — global fallback will be used</span>'}
+          </p>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            New secret (min 32 chars, leave blank to keep current)
+            <input type="password" name="identitySecret" placeholder="" style="max-width:360px">
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </form>`;
+
+  return layout('Settings', shop, body, 0);
 }
 
 export function renderReplayResult(shop: string, ok: boolean, error?: string): string {

@@ -14,9 +14,15 @@ export interface CreateSessionResult {
   orderCurrency?: string | null;
 }
 
+export interface AttributionContext {
+  conversationId: string | null;
+  channelSessionId: string | null;
+}
+
 export async function createOrGetCheckoutSession(
   shopDomain: string,
   orderId: string,
+  attribution: AttributionContext = { conversationId: null, channelSessionId: null },
 ): Promise<CreateSessionResult> {
   const shop = await prisma.shop.findUnique({
     where: { shopDomain },
@@ -52,7 +58,7 @@ export async function createOrGetCheckoutSession(
   }
 
   try {
-    return await createSession(shop.id, shopDomain, orderId);
+    return await createSession(shop.id, shopDomain, orderId, attribution);
   } catch (err: unknown) {
     if ((err as { code?: string })?.code === 'P2002') {
       const concurrent = await prisma.shopifyOrderPayment.findUnique({
@@ -128,6 +134,7 @@ async function createSession(
   shopId: string,
   shopDomain: string,
   orderId: string,
+  attribution: AttributionContext = { conversationId: null, channelSessionId: null },
 ): Promise<CreateSessionResult> {
   const { session, order } = await buildAndCreateOPSession(
     shopDomain,
@@ -145,6 +152,8 @@ async function createSession(
       currency: session.currency,
       orderAmount: order.total_price,
       orderCurrency: order.currency,
+      conversationId: attribution.conversationId,
+      channelSessionId: attribution.channelSessionId,
       status: 'pending',
     },
   });

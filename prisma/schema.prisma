@@ -19,8 +19,27 @@ model Shop {
   webhooks      ShopifyWebhook[]
   syncEvents    ShopifySyncEvent[]
   orderPayments ShopifyOrderPayment[]
+  settings      ShopSettings?
 
   @@map("shops")
+}
+
+// Per-shop conversational commerce settings.
+model ShopSettings {
+  id                  String   @id @default(uuid())
+  shopId              String   @unique
+  shop                Shop     @relation(fields: [shopId], references: [id])
+  webchatEnabled      Boolean  @default(false)
+  webchatEntrypointId String?
+  webchatEmbedUrl     String?
+  identitySecret      String?  // HMAC key for signing identity tokens; AES-256-GCM encrypted
+  whatsappEnabled     Boolean  @default(false)
+  whatsappNumber      String?
+  whatsappFlowId      String?  // Orangepill flow entrypoint ID (alternative to phone number)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("shop_settings")
 }
 
 model ShopifyWebhook {
@@ -85,6 +104,8 @@ model ShopifyOrderPayment {
   currency             String
   orderAmount          String?   // original Shopify order amount (for multi-currency display)
   orderCurrency        String?   // original Shopify order currency
+  conversationId       String?   // Orangepill conversation attribution
+  channelSessionId     String?   // Orangepill channel session attribution
   status               String    @default("pending")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
