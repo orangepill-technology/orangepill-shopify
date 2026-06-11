@@ -118,7 +118,18 @@ export async function adminUiRoutes(fastify: FastifyInstance): Promise<void> {
 
     const settings = await getShopSettings(resolved.id);
     return reply.type('text/html').send(renderSettings(q.shop!, {
-      ...settings,
+      integrationId: settings.integrationId,
+      merchantId: settings.merchantId,
+      apiKeySet: settings.apiKey !== null,
+      orangepillApiUrl: settings.orangepillApiUrl,
+      webhookSecretSet: settings.webhookSecret !== null,
+      webchatEnabled: settings.webchatEnabled,
+      webchatEntrypointId: settings.webchatEntrypointId,
+      webchatEmbedUrl: settings.webchatEmbedUrl,
+      whatsappEnabled: settings.whatsappEnabled,
+      whatsappNumber: settings.whatsappNumber,
+      whatsappFlowId: settings.whatsappFlowId,
+      whatsappStickyEnabled: settings.whatsappStickyEnabled,
       identitySecretSet: settings.identitySecret !== null,
     }));
   });
@@ -130,19 +141,36 @@ export async function adminUiRoutes(fastify: FastifyInstance): Promise<void> {
     if (!resolved) return;
 
     await upsertShopSettings(resolved.id, {
+      integrationId: body.integrationId || null,
+      merchantId: body.merchantId || null,
+      orangepillApiUrl: body.orangepillApiUrl || null,
+      // Only update secrets if a new non-empty value was submitted
+      ...(body.apiKey ? { apiKey: body.apiKey } : {}),
+      ...(body.webhookSecret ? { webhookSecret: body.webhookSecret } : {}),
       webchatEnabled: body.webchatEnabled === '1',
       webchatEntrypointId: body.webchatEntrypointId || null,
       webchatEmbedUrl: body.webchatEmbedUrl || null,
       whatsappEnabled: body.whatsappEnabled === '1',
+      whatsappStickyEnabled: body.whatsappStickyEnabled === '1',
       whatsappNumber: body.whatsappNumber || null,
       whatsappFlowId: body.whatsappFlowId || null,
-      // Only update secret if a new non-empty value was submitted
       ...(body.identitySecret ? { identitySecret: body.identitySecret } : {}),
     });
 
     const settings = await getShopSettings(resolved.id);
     return reply.type('text/html').send(renderSettings(shop, {
-      ...settings,
+      integrationId: settings.integrationId,
+      merchantId: settings.merchantId,
+      apiKeySet: settings.apiKey !== null,
+      orangepillApiUrl: settings.orangepillApiUrl,
+      webhookSecretSet: settings.webhookSecret !== null,
+      webchatEnabled: settings.webchatEnabled,
+      webchatEntrypointId: settings.webchatEntrypointId,
+      webchatEmbedUrl: settings.webchatEmbedUrl,
+      whatsappEnabled: settings.whatsappEnabled,
+      whatsappNumber: settings.whatsappNumber,
+      whatsappFlowId: settings.whatsappFlowId,
+      whatsappStickyEnabled: settings.whatsappStickyEnabled,
       identitySecretSet: settings.identitySecret !== null,
     }, true));
   });

@@ -363,13 +363,27 @@ export function renderPayments(shop: string, payments: unknown[], nextCursor: st
 }
 
 export interface SettingsFormData {
+  // Integration credentials — secrets replaced with boolean presence flags
+  integrationId: string | null;
+  merchantId: string | null;
+  apiKeySet: boolean;
+  orangepillApiUrl: string | null;
+  webhookSecretSet: boolean;
+  // Conversational commerce
   webchatEnabled: boolean;
   webchatEntrypointId: string | null;
   webchatEmbedUrl: string | null;
   whatsappEnabled: boolean;
   whatsappNumber: string | null;
   whatsappFlowId: string | null;
+  whatsappStickyEnabled: boolean;
   identitySecretSet: boolean;
+}
+
+function secretBadge(isSet: boolean, fallbackLabel = 'global fallback will be used'): string {
+  return isSet
+    ? '<span style="background:#d3f5e3;border-radius:4px;padding:1px 6px;font-size:12px;color:#1a6b3e">Secret is set</span>'
+    : `<span style="background:#fff4e4;border-radius:4px;padding:1px 6px;font-size:12px;color:#916a00">Not set — ${fallbackLabel}</span>`;
 }
 
 export function renderSettings(shop: string, data: SettingsFormData, saved = false): string {
@@ -381,6 +395,36 @@ export function renderSettings(shop: string, data: SettingsFormData, saved = fal
     ${saved ? '<div style="background:#d3f5e3;border:1px solid #95c9a7;border-radius:6px;padding:10px 16px;color:#1a6b3e;margin-bottom:12px;font-size:13px">Settings saved.</div>' : ''}
     <form method="POST" action="/app/settings">
       <input type="hidden" name="shop" value="${shop}">
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">Integration</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <p style="font-size:13px;color:#6d7175">
+            Per-store Orangepill credentials. When set these override the global environment variables,
+            allowing different Shopify stores to connect to different Orangepill tenants.
+          </p>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Integration ID
+            <input name="integrationId" value="${v(data.integrationId)}" placeholder="Overrides ORANGEPILL_INTEGRATION_ID" style="max-width:480px">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Merchant ID
+            <input name="merchantId" value="${v(data.merchantId)}" placeholder="Overrides ORANGEPILL_MERCHANT_ID" style="max-width:480px">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            API Base URL
+            <input name="orangepillApiUrl" value="${v(data.orangepillApiUrl)}" placeholder="https://api.orangepill.cc (overrides ORANGEPILL_API_URL)" style="max-width:480px">
+          </label>
+          <div style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            API Key ${secretBadge(data.apiKeySet, 'ORANGEPILL_API_KEY env var will be used')}
+            <input type="password" name="apiKey" placeholder="Leave blank to keep current value" style="max-width:360px" autocomplete="new-password">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-size:13px">
+            Webhook Secret ${secretBadge(data.webhookSecretSet, 'ORANGEPILL_WEBHOOK_SECRET env var will be used')}
+            <input type="password" name="webhookSecret" placeholder="Leave blank to keep current value" style="max-width:360px" autocomplete="new-password">
+          </div>
+        </div>
+      </div>
 
       <div class="card" style="margin-bottom:16px">
         <div class="card-header">Webchat</div>
@@ -400,14 +444,17 @@ export function renderSettings(shop: string, data: SettingsFormData, saved = fal
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="card-header">WhatsApp CTA</div>
+        <div class="card-header">WhatsApp</div>
         <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
           <label style="display:flex;align-items:center;gap:8px;font-size:14px">
-            <input type="checkbox" name="whatsappEnabled" value="1" ${checked(data.whatsappEnabled)}> Enable WhatsApp button
+            <input type="checkbox" name="whatsappEnabled" value="1" ${checked(data.whatsappEnabled)}> Enable WhatsApp button on product pages
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px">
+            <input type="checkbox" name="whatsappStickyEnabled" value="1" ${checked(data.whatsappStickyEnabled)}> Show sticky button on all store pages (bottom-right corner)
           </label>
           <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
-            WhatsApp number (E.164, e.g. +573001234567)
-            <input name="whatsappNumber" value="${v(data.whatsappNumber)}" placeholder="+57..." style="max-width:240px">
+            WhatsApp number (E.164 without leading +, e.g. 573001234567)
+            <input name="whatsappNumber" value="${v(data.whatsappNumber)}" placeholder="573001234567" style="max-width:240px">
           </label>
           <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
             Orangepill Flow entrypoint ID (overrides number if set)
@@ -422,7 +469,7 @@ export function renderSettings(shop: string, data: SettingsFormData, saved = fal
           <p style="font-size:13px;color:#6d7175">
             HMAC secret used to sign identity tokens delivered to the storefront.
             Once set the secret value is never displayed again. Leave blank to keep the current value.
-            ${data.identitySecretSet ? '<span style="background:#d3f5e3;border-radius:4px;padding:1px 6px;font-size:12px;color:#1a6b3e">Secret is set</span>' : '<span style="background:#fff4e4;border-radius:4px;padding:1px 6px;font-size:12px;color:#916a00">Not set — global fallback will be used</span>'}
+            ${secretBadge(data.identitySecretSet, 'global fallback will be used')}
           </p>
           <label style="display:flex;flex-direction:column;gap:4px;font-size:13px">
             New secret (min 32 chars, leave blank to keep current)

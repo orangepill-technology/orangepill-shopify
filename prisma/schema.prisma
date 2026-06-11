@@ -30,13 +30,22 @@ model ShopSettings {
   id                  String   @id @default(uuid())
   shopId              String   @unique
   shop                Shop     @relation(fields: [shopId], references: [id])
+  // Orangepill integration credentials — override global env vars when set.
+  // apiKey and webhookSecret are AES-256-GCM encrypted at rest.
+  integrationId    String?  // overrides ORANGEPILL_INTEGRATION_ID
+  merchantId       String?  // overrides ORANGEPILL_MERCHANT_ID
+  apiKey           String?  // encrypted; overrides ORANGEPILL_API_KEY
+  orangepillApiUrl String?  // overrides ORANGEPILL_API_URL
+  webhookSecret    String?  // encrypted; overrides ORANGEPILL_WEBHOOK_SECRET
+
   webchatEnabled      Boolean  @default(false)
   webchatEntrypointId String?
   webchatEmbedUrl     String?
   identitySecret      String?  // HMAC key for signing identity tokens; AES-256-GCM encrypted
-  whatsappEnabled     Boolean  @default(false)
-  whatsappNumber      String?
-  whatsappFlowId      String?  // Orangepill flow entrypoint ID (alternative to phone number)
+  whatsappEnabled       Boolean  @default(false)
+  whatsappNumber        String?
+  whatsappFlowId        String?  // Orangepill flow entrypoint ID (alternative to phone number)
+  whatsappStickyEnabled Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -1,0 +1,29 @@
+{% comment %}
+  Orangepill App Embed — enable once in Theme Editor → App embeds.
+  Injects the sticky WhatsApp button and/or the Rufus-style webchat panel on
+  every storefront page. No configuration here — all settings come from the
+  Orangepill app settings page: /app/settings?shop=<your-store>.myshopify.com
+{% endcomment %}
+
+<div
+  id="op-embed-root"
+  data-op-block="embed"
+  data-shop="{{ shop.permanent_domain }}"
+  data-proxy-base="{{ routes.root_url }}apps/orangepill"
+  {{ block.shopify_attributes }}
+></div>
+
+{{ 'orangepill.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Orangepill",
+  "target": "body",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Activates the sticky WhatsApp button and Rufus-style webchat panel. Toggle which features appear in the Orangepill app settings page — no configuration is needed here."
+    }
+  ]
+}
+{% endschema %}

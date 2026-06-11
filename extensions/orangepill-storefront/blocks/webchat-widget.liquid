@@ -1,70 +1,74 @@
 {% comment %}
-  Orangepill Webchat Widget Block
-  Place this block in the footer section or any global section.
-  The embed URL and entrypoint ID are set in Orangepill app settings.
+  Orangepill Webchat Trigger — inline "Chat with us" button for sections.
+  Opens the Rufus-style chat panel injected by the Orangepill App Embed.
+  Requires: Orangepill App Embed enabled in Theme Editor → App embeds.
 {% endcomment %}
 
-{%- if block.settings.enable_webchat -%}
+{%- if block.settings.show_button -%}
   <div
-    id="op-wc-{{ block.id }}"
-    data-op-block="webchat-widget"
+    data-op-block="webchat-trigger"
     data-shop="{{ shop.permanent_domain }}"
-    data-proxy-base="{{ routes.root_url }}apps/orangepill"
-    data-enabled="{{ block.settings.enable_webchat }}"
-    data-entrypoint="{{ block.settings.entrypoint_id | escape }}"
-    data-embed-url="{{ block.settings.embed_url | escape }}"
-    style="position:fixed;bottom:{{ block.settings.bottom_offset }}px;right:{{ block.settings.right_offset }}px;z-index:9999;"
     {{ block.shopify_attributes }}
-  ></div>
-
-  {{ 'orangepill.js' | asset_url | script_tag }}
+  >
+    <button
+      type="button"
+      onclick="if(window.opOpenChat){window.opOpenChat()}else{console.warn('[Orangepill] App embed not active — enable it in Theme Editor → App embeds')}"
+      style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:{{ block.settings.button_color }};color:{{ block.settings.text_color }};border:none;border-radius:{{ block.settings.border_radius }}px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      {{ block.settings.button_text }}
+    </button>
+  </div>
 {%- endif -%}
 
 {% schema %}
 {
-  "name": "Webchat Widget",
+  "name": "Webchat Trigger",
   "target": "section",
   "settings": [
     {
+      "type": "paragraph",
+      "content": "Opens the Orangepill chat panel. Requires the Orangepill app embed to be enabled in Theme Editor → App embeds."
+    },
+    {
       "type": "checkbox",
-      "id": "enable_webchat",
-      "label": "Enable webchat widget",
+      "id": "show_button",
+      "label": "Show button",
       "default": true
     },
     {
       "type": "text",
-      "id": "entrypoint_id",
-      "label": "Orangepill entrypoint ID",
-      "info": "Copy from the Orangepill app settings page."
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Chat with us"
     },
     {
-      "type": "url",
-      "id": "embed_url",
-      "label": "Embed script URL",
-      "info": "Copy from the Orangepill app settings page."
+      "type": "color",
+      "id": "button_color",
+      "label": "Button color",
+      "default": "#1a1a1a"
     },
     {
-      "type": "range",
-      "id": "bottom_offset",
-      "label": "Bottom offset (px)",
-      "min": 8,
-      "max": 64,
-      "step": 4,
-      "default": 16
+      "type": "color",
+      "id": "text_color",
+      "label": "Text color",
+      "default": "#ffffff"
     },
     {
       "type": "range",
-      "id": "right_offset",
-      "label": "Right offset (px)",
-      "min": 8,
-      "max": 64,
+      "id": "border_radius",
+      "label": "Border radius (px)",
+      "min": 0,
+      "max": 32,
       "step": 4,
-      "default": 16
+      "default": 4
     }
   ],
   "presets": [
     {
-      "name": "Webchat Widget"
+      "name": "Webchat Trigger"
     }
   ]
 }
