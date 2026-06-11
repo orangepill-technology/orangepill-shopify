@@ -80,7 +80,7 @@ function layout(title: string, shop: string, body: string, refreshMs = 10_000): 
         window.shopify.createApp({ apiKey: '${config.SHOPIFY_API_KEY}', host: h });
       }
     } catch(e) {}
-    setTimeout(() => location.reload(), ${refreshMs});
+    ${refreshMs > 0 ? `setTimeout(() => location.reload(), ${refreshMs});` : ''}
   </script>
   <nav>
     <a href="/app?shop=${shop}" ${title === 'Overview' ? 'class="active"' : ''}>Overview</a>
