@@ -199,7 +199,34 @@ Fastify server (this app)
 
 ---
 
-## Environment variables
+## Configuration
+
+The plugin uses a two-tier configuration model: **global env vars** set the defaults for the entire server instance, and **per-store settings** (stored in the `ShopSettings` DB row) override those defaults for individual Shopify stores.
+
+```
+Global env vars  →  fallback for all stores
+Per-store ShopSettings  →  override for one store (takes precedence)
+```
+
+This lets you run a single server instance that connects multiple Shopify stores to **different Orangepill tenants** — without redeploying or changing environment variables.
+
+### When to use global env vars
+
+Use env vars for:
+- Infrastructure config (database, encryption key, server URL)
+- A **single-tenant** deployment where every Shopify store maps to the same Orangepill account
+- Default fallback values that apply until a store's settings are explicitly configured
+
+### When to use per-store settings
+
+Use `ShopSettings` for:
+- **Multi-tenant** deployments — each Shopify store belongs to a different Orangepill merchant
+- Any setting that differs between stores (WhatsApp number, webchat entrypoint, API key, etc.)
+- Rotating credentials for one store without affecting others
+
+---
+
+### Global environment variables
 
 Copy `.env.example` to `.env` and fill in every value.
 
@@ -210,18 +237,106 @@ Copy `.env.example` to `.env` and fill in every value.
 | `HOST` | no | Bind address. Defaults to `0.0.0.0`. |
 | `APP_URL` | **yes** | Public HTTPS URL of this server, e.g. `https://shopify.yourapp.example.com`. Must match what Shopify has on file for the app. |
 | `DATABASE_URL` | **yes** | PostgreSQL connection string, e.g. `postgresql://user:pass@localhost:5432/orangepill_shopify`. |
-| `ENCRYPTION_KEY` | **yes** | At least 32-character random string. Used to encrypt Shopify access tokens and identity secrets at rest (AES-256-GCM). Rotate with care — existing encrypted values become unreadable. |
+| `ENCRYPTION_KEY` | **yes** | 32+ character random string. Encrypts Shopify access tokens, identity secrets, and Orangepill API keys at rest (AES-256-GCM). **Never reuse between environments** — rotating this key invalidates all existing encrypted values. |
 | `SHOPIFY_API_KEY` | **yes** | From the Shopify Partner Dashboard → app credentials. |
 | `SHOPIFY_API_SECRET` | **yes** | From the Shopify Partner Dashboard → app credentials. |
 | `SHOPIFY_SCOPES` | no | Defaults to `read_orders,read_customers`. |
 | `SHOPIFY_API_VERSION` | no | Defaults to `2024-01`. |
-| `ORANGEPILL_API_URL` | **yes** | Orangepill platform API base URL. |
-| `ORANGEPILL_API_KEY` | **yes** | Orangepill API key. |
-| `ORANGEPILL_INTEGRATION_ID` | **yes** | Orangepill integration ID for this Shopify channel. |
-| `ORANGEPILL_MERCHANT_ID` | **yes** | Orangepill merchant ID. |
-| `ORANGEPILL_WEBHOOK_SECRET` | **yes** | HMAC secret used to verify inbound webhooks from Orangepill. |
-| `ADMIN_API_KEY` | **yes** | At least 16-character key for the internal admin API. |
-| `IDENTITY_SECRET` | no | At least 32-character fallback HMAC secret for signing storefront identity tokens. Used when no per-shop secret is configured in `ShopSettings`. Required if you use the webchat identity bridge without setting per-shop secrets. |
+| `ORANGEPILL_API_URL` | **yes** | Orangepill platform API base URL. Fallback for stores with no per-store URL. |
+| `ORANGEPILL_API_KEY` | **yes** | Orangepill API key. Fallback for stores with no per-store key. |
+| `ORANGEPILL_INTEGRATION_ID` | **yes** | Orangepill integration ID. Fallback for stores with no per-store integration. |
+| `ORANGEPILL_MERCHANT_ID` | **yes** | Orangepill merchant ID. Fallback for stores with no per-store merchant. |
+| `ORANGEPILL_WEBHOOK_SECRET` | **yes** | HMAC secret used to verify inbound webhooks from Orangepill. Fallback for stores with no per-store secret. |
+| `ADMIN_API_KEY` | **yes** | 16+ character key for the internal admin API (`/internal/*` routes). |
+| `IDENTITY_SECRET` | no | 32+ character fallback HMAC secret for signing storefront identity tokens. Used when no per-store secret is set in `ShopSettings`. Required for the webchat identity bridge in single-tenant deployments. |
+
+---
+
+### Per-store settings
+
+Each installed store has a `ShopSettings` row in the database. Settings are managed through the Orangepill admin UI (`/app/settings?shop=<domain>`) or the internal API.
+
+**Orangepill integration credentials** — when set, these override the corresponding global env vars for that store only. `apiKey` and `webhookSecret` are AES-256-GCM encrypted in the database.
+
+| Field | Overrides | Description |
+|---|---|---|
+| `integrationId` | `ORANGEPILL_INTEGRATION_ID` | Orangepill integration ID for this store |
+| `merchantId` | `ORANGEPILL_MERCHANT_ID` | Orangepill merchant ID for this store |
+| `apiKey` | `ORANGEPILL_API_KEY` | Orangepill API key (encrypted at rest) |
+| `orangepillApiUrl` | `ORANGEPILL_API_URL` | Orangepill API base URL |
+| `webhookSecret` | `ORANGEPILL_WEBHOOK_SECRET` | Webhook HMAC verification secret (encrypted at rest) |
+
+**Conversational commerce** — controls the storefront Theme App Extension behavior for this store.
+
+| Field | Default | Description |
+|---|---|---|
+| `webchatEnabled` | `false` | Activates the Rufus-style chat panel and trigger bubble |
+| `webchatEmbedUrl` | — | URL of the Orangepill webchat embed script |
+| `webchatEntrypointId` | — | Orangepill conversation entrypoint ID |
+| `whatsappEnabled` | `false` | Activates the inline product-page WhatsApp button |
+| `whatsappStickyEnabled` | `false` | Activates the floating sticky WhatsApp button on all pages |
+| `whatsappNumber` | — | WhatsApp number in E.164 format without leading `+`, e.g. `573001234567` |
+| `whatsappFlowId` | — | Orangepill flow entrypoint ID — overrides `whatsappNumber` if set |
+| `identitySecret` | — | Per-store HMAC secret for signing storefront identity tokens (encrypted at rest). Falls back to `IDENTITY_SECRET` env var if not set. |
+
+---
+
+### Internal settings API
+
+Settings can be read and written programmatically via the internal API. Authenticate with the `ADMIN_API_KEY` env var.
+
+**Read settings for a store**
+
+```bash
+curl https://<APP_URL>/internal/settings/<shop-domain> \
+  -H "Authorization: Bearer <ADMIN_API_KEY>"
+```
+
+Response — secrets are never returned; presence is indicated by boolean flags:
+
+```json
+{
+  "integrationId": "op-int-abc123",
+  "merchantId": "op-merchant-456",
+  "apiKeySet": true,
+  "orangepillApiUrl": "https://api.orangepill.cc",
+  "webhookSecretSet": true,
+  "webchatEnabled": true,
+  "webchatEmbedUrl": "https://cdn.orangepill.cc/webchat.js",
+  "webchatEntrypointId": "op-ep-abc123",
+  "whatsappEnabled": true,
+  "whatsappStickyEnabled": true,
+  "whatsappNumber": "573001234567",
+  "whatsappFlowId": null,
+  "identitySecretSet": true
+}
+```
+
+**Update settings for a store**
+
+Send only the fields you want to change. Omitted fields are left unchanged. For secret fields (`apiKey`, `webhookSecret`, `identitySecret`), omitting means "keep current value"; sending an empty string or `null` clears it.
+
+```bash
+curl -X PUT https://<APP_URL>/internal/settings/<shop-domain> \
+  -H "Authorization: Bearer <ADMIN_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "integrationId": "op-int-abc123",
+    "merchantId": "op-merchant-456",
+    "apiKey": "sk-live-...",
+    "orangepillApiUrl": "https://api.orangepill.cc",
+    "webhookSecret": "whsec-...",
+    "webchatEnabled": true,
+    "webchatEmbedUrl": "https://cdn.orangepill.cc/webchat.js",
+    "webchatEntrypointId": "op-ep-abc123",
+    "whatsappEnabled": true,
+    "whatsappStickyEnabled": true,
+    "whatsappNumber": "573001234567",
+    "identitySecret": "my-32-char-secret-for-this-store"
+  }'
+```
+
+Returns `204 No Content` on success.
 
 ---
 
@@ -377,21 +492,7 @@ https://<APP_URL>/app/settings?shop=<store-domain>.myshopify.com
 | | Entrypoint ID | Orangepill conversation entrypoint |
 | **Identity token** | Secret | Per-store HMAC key for signing storefront identity tokens |
 
-Settings can also be set via the internal API:
-
-```bash
-curl -X PUT https://<APP_URL>/internal/settings/<shop-domain> \
-  -H "Authorization: Bearer <ADMIN_API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "whatsappEnabled": true,
-    "whatsappStickyEnabled": true,
-    "whatsappNumber": "573001234567",
-    "webchatEnabled": true,
-    "webchatEntrypointId": "op-ep-abc123",
-    "webchatEmbedUrl": "https://cdn.orangepill.cc/webchat.js"
-  }'
-```
+See [Internal settings API](#internal-settings-api) for the full API reference.
 
 ---
 
