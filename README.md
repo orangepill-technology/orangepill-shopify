@@ -41,8 +41,11 @@ Orangepill identifies your customers across channels using their email and phone
 **WhatsApp CTA button**
 An "Ask on WhatsApp" button appears on product pages via a Theme App Extension block. Merchants place the block in their theme editor. Each click opens a WhatsApp conversation pre-loaded with the product title and URL — no hardcoded phone numbers in Liquid templates.
 
-**Webchat widget**
-A floating webchat widget that can be placed on any page via a Theme App Extension block. It initialises with a signed identity token so the Orangepill conversation agent receives verified customer identity from the first message.
+**Sticky WhatsApp button**
+A floating WhatsApp circle (bottom-right corner) that appears on every page of the store when enabled. Activated by toggling the App Embed in Theme Editor once — no per-section placement needed.
+
+**Webchat panel (Rufus-style)**
+A slide-up chat panel available on every storefront page. Activated by a floating trigger bubble (bottom-right corner) or by any "Chat with us" section block. The panel lazily loads the Orangepill webchat embed on first open. It initialises with a signed identity token so the conversation agent receives verified customer identity from the first message. Panel open/closed state is preserved across page navigations via `sessionStorage`.
 
 **Webchat identity bridge**
 Logged-in Shopify customers are identified across channels via a short-lived HMAC-signed identity token. The token carries shop domain, Shopify customer ID, email, phone, and name. Anonymous visitors get an anonymous token so the session is still tracked. The HMAC secret never reaches the browser.
@@ -290,14 +293,15 @@ When adding new models or columns, edit `prisma/schema.prisma`, run `npm run db:
 
 ## Theme App Extension
 
-The extension lives in `extensions/orangepill-storefront/` and ships two blocks:
+The extension lives in `extensions/orangepill-storefront/` and includes three blocks:
 
-| Block | File | Where to place |
+| Block | Type | Purpose |
 |---|---|---|
-| WhatsApp Button | `blocks/whatsapp-button.liquid` | Product page template — any section that accepts app blocks |
-| Webchat Widget | `blocks/webchat-widget.liquid` | Footer or any global section |
+| `blocks/orangepill-embed.liquid` | **App Embed** (global) | Sticky WhatsApp button + Rufus-style webchat panel. Enabled once, active on every page |
+| `blocks/whatsapp-button.liquid` | Section block | Inline "Consultar por WhatsApp" CTA on product pages |
+| `blocks/webchat-widget.liquid` | Section block | Optional inline "Chat with us" button that opens the webchat panel |
 
-**The extension is deployed once per app, not once per store.** After deployment, any merchant that installs the app can add the blocks to their theme via the Shopify theme editor. Per-store behavior (which phone number, which entrypoint, etc.) is controlled by the `ShopSettings` row for that store, not by the extension itself.
+**The extension is deployed once per app, not once per store.** After deployment, merchants enable it in their theme. Per-store behavior (which phone number, which entrypoint, etc.) is driven by runtime config (`ShopSettings`), not by the extension itself.
 
 ### Configuring shopify.app.toml
 
@@ -326,25 +330,52 @@ You can commit both config files — `client_id` is the public API key, not the 
 # Install Shopify CLI if you haven't already
 npm install -g @shopify/cli
 
-# Deploy
+# Deploy (run once; all merchants that install the app get the updated extension)
 npm run extension:deploy
 ```
 
-After deployment, merchants add blocks via **Shopify Admin → Online Store → Themes → Customize → Add block → Apps → Orangepill**.
+---
 
-### Per-store configuration
+### Installation per store
 
-Once blocks are added, each store's behavior is configured via the **Settings** page in the Orangepill app admin (`/app/settings?shop=<store-domain>`):
+#### Step 1 — Enable the App Embed (required for sticky WA + webchat panel)
 
-| Setting | Purpose |
-|---|---|
-| Enable webchat | Shows/hides the webchat widget |
-| Webchat entrypoint ID | Orangepill conversation entrypoint |
-| Embed script URL | URL of the webchat embed script |
-| Enable WhatsApp button | Shows/hides the WA CTA on product pages |
-| WhatsApp number | E.164 format, e.g. `+573001234567` |
-| WhatsApp flow ID | Orangepill flow entrypoint (overrides number if set) |
-| Identity secret | Per-shop HMAC key for signing identity tokens |
+The App Embed block activates the sticky WhatsApp button and the Rufus-style webchat panel globally across the store. It must be enabled before any of those features appear.
+
+1. **Shopify Admin** → Online Store → Themes → **Customize**
+2. In the left sidebar, click **App embeds** (at the bottom of the sidebar)
+3. Toggle **Orangepill** on
+4. Click **Save**
+
+That's it. The sticky button and/or chat panel will now appear based on the settings configured in the Orangepill app (see [Per-store configuration](#per-store-configuration) below). No further placement is needed.
+
+> **How it works:** The App Embed block injects a single `<div>` before `</body>` on every page. The `orangepill.js` script fetches runtime settings from `/apps/orangepill/settings` and conditionally renders the sticky WhatsApp button and/or the chat panel. No theme code is modified.
+
+---
+
+#### Step 2 — Configure the features (Orangepill app settings)
+
+Open the settings page for the store in the Orangepill admin:
+
+```
+https://<APP_URL>/app/settings?shop=<store-domain>.myshopify.com
+```
+
+| Section | Setting | Purpose |
+|---|---|---|
+| **Integration** | Integration ID | Overrides global `ORANGEPILL_INTEGRATION_ID` env var for this store |
+| | Merchant ID | Overrides global `ORANGEPILL_MERCHANT_ID` |
+| | API Key | Overrides global `ORANGEPILL_API_KEY` (encrypted at rest) |
+| | API Base URL | Overrides global `ORANGEPILL_API_URL` |
+| | Webhook Secret | Overrides global `ORANGEPILL_WEBHOOK_SECRET` (encrypted at rest) |
+| **WhatsApp** | Enable WhatsApp button | Shows the inline CTA on product pages (section block must also be placed) |
+| | Show sticky button | Shows a floating WhatsApp circle on every page (requires App Embed enabled) |
+| | WhatsApp number | E.164 without leading `+`, e.g. `573001234567` |
+| | Flow entrypoint ID | Orangepill flow ID — overrides phone number if set |
+| **Webchat** | Enable webchat | Activates the chat panel trigger (requires App Embed enabled) |
+| | Embed script URL | URL of the Orangepill webchat embed JS |
+| | Entrypoint ID | Orangepill conversation entrypoint |
+| **Identity token** | Secret | Per-store HMAC key for signing storefront identity tokens |
 
 Settings can also be set via the internal API:
 
@@ -354,12 +385,68 @@ curl -X PUT https://<APP_URL>/internal/settings/<shop-domain> \
   -H "Content-Type: application/json" \
   -d '{
     "whatsappEnabled": true,
-    "whatsappNumber": "+573001234567",
+    "whatsappStickyEnabled": true,
+    "whatsappNumber": "573001234567",
     "webchatEnabled": true,
     "webchatEntrypointId": "op-ep-abc123",
     "webchatEmbedUrl": "https://cdn.orangepill.cc/webchat.js"
   }'
 ```
+
+---
+
+#### Step 3 (optional) — Add WhatsApp CTA to product pages
+
+The inline product-page WhatsApp button is a section block placed independently of the App Embed.
+
+1. **Shopify Admin** → Online Store → Themes → **Customize**
+2. Navigate to a **Product** page template using the page selector at the top
+3. Click **Add section** → Apps → Orangepill → **WhatsApp Button**
+4. In the block settings panel, adjust button text and top margin
+5. Click **Save**
+
+The phone number and flow ID are read from Orangepill settings at runtime — you do not configure them in the Theme Editor. The block only controls the button's label and spacing.
+
+> **Note:** This block shows a product-page inline CTA regardless of whether the App Embed is enabled.
+
+---
+
+#### Step 4 (optional) — Add an inline "Chat with us" button
+
+The Webchat Trigger section block places a "Chat with us" button in any section. Clicking it opens the Rufus-style chat panel.
+
+1. **Shopify Admin** → Online Store → Themes → **Customize**
+2. Navigate to the page or template where you want the button (e.g. product pages, homepage)
+3. Click **Add section** → Apps → Orangepill → **Webchat Trigger**
+4. Customize button text, color, and border radius in the block settings
+5. Click **Save**
+
+> **Requires:** The Orangepill App Embed must be enabled (Step 1). Without the embed, the `window.opOpenChat()` function is not defined and the button will log a warning.
+
+---
+
+#### Rufus-style webchat panel — how it works
+
+The chat panel is a fixed, slide-up drawer rendered entirely by `orangepill.js`:
+
+- **Trigger:** A floating chat bubble (bottom-right corner) or any Webchat Trigger section block
+- **Size:** 380 × 560 px on desktop; full-width, 80 vh on mobile (anchored to the bottom)
+- **Embed loading:** The Orangepill webchat embed script is loaded lazily — only on the first time the panel is opened, not on page load. This adds zero weight to pages where the customer never opens the chat.
+- **Identity:** An HMAC-signed identity token is fetched server-side from `/apps/orangepill/identity` before the embed script loads. It is passed to the embed via `window.OrangepillChatConfig.identityToken`.
+- **State:** Panel open/closed state is stored in `sessionStorage` so the panel stays open as the customer navigates between pages.
+- **Public API:** Any storefront code can open or close the panel with `window.opOpenChat()` / `window.opCloseChat()`.
+
+**`window.OrangepillChatConfig`** (set before the embed script loads):
+
+```js
+{
+  entrypointId: "op-ep-abc123",   // from Orangepill settings
+  identityToken: "<signed-jwt>",  // server-signed, never hardcoded
+  shop: "your-store.myshopify.com"
+}
+```
+
+The Orangepill webchat embed script should read this global config object on initialisation.
 
 ---
 
@@ -433,8 +520,9 @@ extensions/
     shopify.extension.toml        Theme App Extension manifest
     assets/orangepill.js          Storefront JS — served from Shopify CDN
     blocks/
-      whatsapp-button.liquid      Product page WhatsApp CTA block
-      webchat-widget.liquid       Floating webchat widget block
+      orangepill-embed.liquid     App Embed (global): sticky WA button + webchat panel
+      whatsapp-button.liquid      Section block: inline product-page WhatsApp CTA
+      webchat-widget.liquid       Section block: inline "Chat with us" trigger button
 
 prisma/
   schema.prisma                   Database schema

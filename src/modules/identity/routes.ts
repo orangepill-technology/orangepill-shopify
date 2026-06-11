@@ -56,6 +56,7 @@ export async function identityRoutes(app: FastifyInstance): Promise<void> {
         whatsappEnabled: settings.whatsappEnabled,
         whatsappNumber: settings.whatsappNumber,
         whatsappFlowId: settings.whatsappFlowId,
+        whatsappStickyEnabled: settings.whatsappStickyEnabled,
         // identitySecret intentionally omitted
       });
   });
