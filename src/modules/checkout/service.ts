@@ -1,7 +1,8 @@
 import { prisma } from '../db/client';
 import { fetchShopifyOrder } from '../shopify/orders';
 import { mapOrderToSessionPayload } from './mapper';
-import { orangepillCheckoutClient } from '../orangepill/checkout-client';
+import { createOrangepillCheckoutClient } from '../orangepill/checkout-client';
+import { resolveShopConfig } from '../config/shop-config';
 import { upsertOrderAttribution } from '../attribution/service';
 import { config } from '../../config';
 import { logger } from '../../logger';
@@ -110,6 +111,7 @@ function confirmingUrl(shopDomain: string, orderId: string): string {
 }
 
 async function buildAndCreateOPSession(
+  shopId: string,
   shopDomain: string,
   orderId: string,
   idempotencyKey: string,
@@ -117,12 +119,14 @@ async function buildAndCreateOPSession(
   session: { checkout_url: string; id: string; amount: string; currency: string };
   order: { total_price: string; currency: string };
 }> {
+  const cfg = await resolveShopConfig(shopId);
+  const checkoutClient = createOrangepillCheckoutClient(cfg);
   const order = await fetchShopifyOrder(shopDomain, orderId);
-  const session = await orangepillCheckoutClient.createCheckoutSession(
+  const session = await checkoutClient.createCheckoutSession(
     mapOrderToSessionPayload(
       order,
       shopDomain,
-      config.ORANGEPILL_MERCHANT_ID,
+      cfg.merchantId,
       confirmingUrl(shopDomain, orderId),
       `https://${shopDomain}`,
     ),
@@ -138,6 +142,7 @@ async function createSession(
   attribution: AttributionContext = { conversationId: null, channelSessionId: null },
 ): Promise<CreateSessionResult> {
   const { session, order } = await buildAndCreateOPSession(
+    shopId,
     shopDomain,
     orderId,
     `shopify:${shopDomain}:order:${orderId}:checkout`,
@@ -179,7 +184,7 @@ async function refreshSession(
   existingId: string,
 ): Promise<CreateSessionResult> {
   const retryKey = `shopify:${shopDomain}:order:${orderId}:checkout:retry:${Date.now()}`;
-  const { session, order } = await buildAndCreateOPSession(shopDomain, orderId, retryKey);
+  const { session, order } = await buildAndCreateOPSession(shopId, shopDomain, orderId, retryKey);
 
   await prisma.shopifyOrderPayment.update({
     where: { id: existingId },
